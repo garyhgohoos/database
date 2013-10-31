@@ -23,6 +23,7 @@ DECLARE
   _sohead RECORD;
   _soitem RECORD;
   _period RECORD;
+  _location RECORD;
   _itemloc RECORD;
   _forcetrans BOOLEAN := FALSE;
   _forceqty NUMERIC := 0.0;
@@ -61,7 +62,8 @@ BEGIN
   -- order line not found
   SELECT coitem_id, coitem_status,
          (coitem_qtyord - coitem_qtyshipped + coitem_qtyreturned - qtyAtShipping(coitem_id)) AS balance,
-         itemsite_id, itemsite_loccntrl, itemsite_controlmethod, itemsite_qtyonhand, itemsite_costmethod
+         itemsite_id, itemsite_warehous_id, itemsite_loccntrl, itemsite_controlmethod,
+         itemsite_qtyonhand, itemsite_costmethod
     INTO _soitem
   FROM coitem JOIN itemsite ON (itemsite_id=coitem_itemsite_id)
   WHERE (coitem_cohead_id=_sohead.cohead_id)
@@ -79,10 +81,9 @@ BEGIN
   -- item not found ???
 
   -- closed or frozen period
-  SELECT period_id, period_closed, period_freeze
-    INTO _period
+  SELECT * INTO _period
   FROM period
-  WHERE (period_id=getPeriodId(pNEW.transaction_date));
+  WHERE ((pNEW.transaction_date) between period_start AND period_end);
   IF (NOT FOUND) THEN
     RETURN -40;
   END IF;
@@ -96,6 +97,14 @@ BEGIN
   -- find itemloc
   IF (_soitem.itemsite_loccntrl) THEN
     -- location not found
+    SELECT *
+    INTO _location
+    FROM location
+    WHERE (location_warehous_id=_soitem.itemsite_warehous_id)
+      AND (formatLocationName(location_id)=pNEW.location);
+    IF (NOT FOUND) THEN
+      RETURN -80;
+    END IF;
     SELECT *
     INTO _itemloc
     FROM itemloc
@@ -115,7 +124,7 @@ BEGIN
     INTO _itemloc
     FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
     WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-      AND (ls_number=pNEW.lotserial);
+      AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
     IF (NOT FOUND) THEN
       IF (NOT pNEW.force) THEN
         RETURN -90;
@@ -131,7 +140,7 @@ BEGIN
     FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
     WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
       AND (formatLocationName(itemloc_location_id)=pNEW.location)
-      AND (ls_number=pNEW.lotserial);
+      AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
     IF (NOT FOUND) THEN
       IF (NOT pNEW.force) THEN
         RETURN -100;
@@ -203,18 +212,31 @@ BEGIN
       END IF;
 
       -- distribute
-      INSERT INTO itemlocdist(itemlocdist_itemlocdist_id,
-                              itemlocdist_source_type,
-                              itemlocdist_source_id,
-                              itemlocdist_qty,
-                              itemlocdist_expiration)
-      SELECT _itemlocdistid,
-             'L',
-             location_id,
-             _forceqty,
-             endOfTime()
-      FROM location
-      WHERE (formatLocationName(location_id)=pNEW.location);
+      IF (_soitem.itemsite_loccntrl) THEN
+        INSERT INTO itemlocdist(itemlocdist_itemlocdist_id,
+                                itemlocdist_source_type,
+                                itemlocdist_source_id,
+                                itemlocdist_qty,
+                                itemlocdist_expiration)
+        SELECT _itemlocdistid,
+               'L',
+               location_id,
+               _forceqty,
+               endOfTime()
+        FROM location
+        WHERE (formatLocationName(location_id)=pNEW.location);
+      ELSE
+        INSERT INTO itemlocdist(itemlocdist_itemlocdist_id,
+                                itemlocdist_source_type,
+                                itemlocdist_source_id,
+                                itemlocdist_qty,
+                                itemlocdist_expiration)
+        VALUES (_itemlocdistid,
+               'L',
+               -1,
+               _forceqty,
+               endOfTime());
+      END IF;
 
       -- post distributions
       PERFORM distributeToLocations(_itemlocdistid);
@@ -238,7 +260,7 @@ BEGIN
       INTO _itemloc
       FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
       WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-        AND (ls_number=pNEW.lotserial);
+        AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
       IF (NOT FOUND) THEN
         RAISE EXCEPTION 'cannot find forced itemloc';
       END IF;
@@ -249,7 +271,7 @@ BEGIN
       FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
       WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
         AND (formatLocationName(itemloc_location_id)=pNEW.location)
-        AND (ls_number=pNEW.lotserial);
+        AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
       IF (NOT FOUND) THEN
         RAISE EXCEPTION 'cannot find forced itemloc';
       END IF;
