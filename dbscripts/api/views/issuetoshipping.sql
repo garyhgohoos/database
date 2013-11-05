@@ -20,6 +20,31 @@ CREATE OR REPLACE FUNCTION api.IssueToShippingTrans(api.issuetoshipping) RETURNS
 -- See www.xtuple.com/CPAL for the full text of the software license.
 DECLARE
   pNEW ALIAS FOR $1;
+
+BEGIN
+
+  RETURN api.IssueToShippingTrans(pNEW.order_type::TEXT,
+                                  pNEW.transaction_date::DATE,
+                                  pNEW.order_number::TEXT,
+                                  pNEW.line_number::INTEGER,
+                                  pNEW.quantity::NUMERIC,
+                                  pNEW.location::TEXT,
+                                  pNEW.lotserial::TEXT,
+                                  pNEW.force::BOOLEAN);
+END;
+$$ LANGUAGE 'plpgsql';
+
+CREATE OR REPLACE FUNCTION api.IssueToShippingTrans(pOrdertype TEXT,
+                                                    pTransactiondate DATE,
+                                                    pOrdernumber TEXT,
+                                                    pLinenumber INTEGER,
+                                                    pQuantity NUMERIC,
+                                                    pLocation TEXT,
+                                                    pLotserial TEXT,
+                                                    pForce BOOLEAN) RETURNS INTEGER AS $$
+-- Copyright (c) 1999-2013 by OpenMFG LLC, d/b/a xTuple. 
+-- See www.xtuple.com/CPAL for the full text of the software license.
+DECLARE
   _sohead RECORD;
   _soitem RECORD;
   _period RECORD;
@@ -39,7 +64,7 @@ BEGIN
   SELECT cohead_id, cohead_status, cohead_holdtype
     INTO _sohead
   FROM cohead
-  WHERE (cohead_number=pNEW.order_number);
+  WHERE (cohead_number=pOrdernumber);
   IF (NOT FOUND) THEN
     RETURN -10;
   END IF;
@@ -67,7 +92,7 @@ BEGIN
     INTO _soitem
   FROM coitem JOIN itemsite ON (itemsite_id=coitem_itemsite_id)
   WHERE (coitem_cohead_id=_sohead.cohead_id)
-    AND (coitem_linenumber=pNEW.line_number);
+    AND (coitem_linenumber=pLinenumber);
   IF (NOT FOUND) THEN
     RETURN -20;
   END IF;
@@ -83,7 +108,7 @@ BEGIN
   -- closed or frozen period
   SELECT * INTO _period
   FROM period
-  WHERE ((pNEW.transaction_date) between period_start AND period_end);
+  WHERE ((pTransactiondate) between period_start AND period_end);
   IF (NOT FOUND) THEN
     RETURN -40;
   END IF;
@@ -101,7 +126,7 @@ BEGIN
     INTO _location
     FROM location
     WHERE (location_warehous_id=_soitem.itemsite_warehous_id)
-      AND (formatLocationName(location_id)=pNEW.location);
+      AND (formatLocationName(location_id)=pLocation);
     IF (NOT FOUND) THEN
       RETURN -80;
     END IF;
@@ -109,9 +134,9 @@ BEGIN
     INTO _itemloc
     FROM itemloc
     WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-      AND (formatLocationName(itemloc_location_id)=pNEW.location);
+      AND (formatLocationName(itemloc_location_id)=pLocation);
     IF (NOT FOUND) THEN
-      IF (NOT pNEW.force) THEN
+      IF (NOT pForce) THEN
         RETURN -80;
       ELSE
         _forcetrans := TRUE;
@@ -124,9 +149,9 @@ BEGIN
     INTO _itemloc
     FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
     WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-      AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
+      AND (UPPER(ls_number)=UPPER(pLotserial));
     IF (NOT FOUND) THEN
-      IF (NOT pNEW.force) THEN
+      IF (NOT pForce) THEN
         RETURN -90;
       ELSE
         _forcetrans := TRUE;
@@ -139,10 +164,10 @@ BEGIN
     INTO _itemloc
     FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
     WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-      AND (formatLocationName(itemloc_location_id)=pNEW.location)
-      AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
+      AND (formatLocationName(itemloc_location_id)=pLocation)
+      AND (UPPER(ls_number)=UPPER(pLotserial));
     IF (NOT FOUND) THEN
-      IF (NOT pNEW.force) THEN
+      IF (NOT pForce) THEN
         RETURN -100;
       ELSE
         _forcetrans := TRUE;
@@ -152,34 +177,34 @@ BEGIN
 
   IF ( (_soitem.itemsite_loccntrl) OR (_soitem.itemsite_controlmethod IN ('S','L')) ) THEN
     -- location/lotserial quantity
-    IF (COALESCE(_itemloc.itemloc_qty, 0.0) < pNEW.quantity) THEN
-      IF (NOT pNEW.force) THEN
+    IF (COALESCE(_itemloc.itemloc_qty, 0.0) < pQuantity) THEN
+      IF (NOT pForce) THEN
         RETURN -110;
       ELSE
         _forcetrans := TRUE;
-        _forceqty := (pNEW.quantity - COALESCE(_itemloc.itemloc_qty, 0.0));
+        _forceqty := (pQuantity - COALESCE(_itemloc.itemloc_qty, 0.0));
       END IF;
     ELSE
-      _forceqty := pNEW.quantity;
+      _forceqty := pQuantity;
     END IF;
   ELSEIF (_soitem.itemsite_costmethod = 'A') THEN
     -- itemsite quantity
-    IF (COALESCE(_soitem.itemsite_qtyonhand, 0.0) < pNEW.quantity) THEN
-      IF (NOT pNEW.force) THEN
+    IF (COALESCE(_soitem.itemsite_qtyonhand, 0.0) < pQuantity) THEN
+      IF (NOT pForce) THEN
         RETURN -110;
       ELSE
         _forcetrans := TRUE;
-        _forceqty := (pNEW.quantity - _soitem.itemsite_qtyonhand);
+        _forceqty := (pQuantity - _soitem.itemsite_qtyonhand);
       END IF;
     ELSE
-      _forceqty := pNEW.quantity;
+      _forceqty := pQuantity;
     END IF;
   END IF;
 
   -- force adjustment trans
   IF (_forcetrans) THEN
     SELECT invAdjustment(_soitem.itemsite_id, _forceqty,
-                         (pNEW.order_number || '-' || pNEW.line_number), 'IssueToShippingForce')
+                         (pOrdernumber || '-' || pLinenumber), 'IssueToShippingForce')
            INTO _itemlocSeries;
     IF (_itemlocSeries < 0) THEN
       RAISE EXCEPTION 'invAdjustment failed, result=%', _itemlocSeries;
@@ -197,7 +222,7 @@ BEGIN
 
       IF (_soitem.itemsite_controlmethod IN ('S','L')) THEN
         -- create lotserial
-        SELECT createLotserial(_soitem.itemsite_id, pNEW.lotserial,
+        SELECT createLotserial(_soitem.itemsite_id, pLotserial,
                                _itemlocSeries, 'I', NULL,
                                _itemlocdistid, _forceqty,
                                endOfTime(), endOfTime()) INTO _lotitemlocdistid;
@@ -224,7 +249,7 @@ BEGIN
                _forceqty,
                endOfTime()
         FROM location
-        WHERE (formatLocationName(location_id)=pNEW.location);
+        WHERE (formatLocationName(location_id)=pLocation);
       ELSE
         INSERT INTO itemlocdist(itemlocdist_itemlocdist_id,
                                 itemlocdist_source_type,
@@ -250,7 +275,7 @@ BEGIN
       INTO _itemloc
       FROM itemloc
       WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-        AND (formatLocationName(itemloc_location_id)=pNEW.location);
+        AND (formatLocationName(itemloc_location_id)=pLocation);
       IF (NOT FOUND) THEN
         RAISE EXCEPTION 'cannot find forced itemloc';
       END IF;
@@ -260,7 +285,7 @@ BEGIN
       INTO _itemloc
       FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
       WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-        AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
+        AND (UPPER(ls_number)=UPPER(pLotserial));
       IF (NOT FOUND) THEN
         RAISE EXCEPTION 'cannot find forced itemloc';
       END IF;
@@ -270,8 +295,8 @@ BEGIN
       INTO _itemloc
       FROM itemloc JOIN ls ON (ls_id=itemloc_ls_id)
       WHERE (itemloc_itemsite_id=_soitem.itemsite_id)
-        AND (formatLocationName(itemloc_location_id)=pNEW.location)
-        AND (UPPER(ls_number)=UPPER(pNEW.lotserial));
+        AND (formatLocationName(itemloc_location_id)=pLocation)
+        AND (UPPER(ls_number)=UPPER(pLotserial));
       IF (NOT FOUND) THEN
         RAISE EXCEPTION 'cannot find forced itemloc';
       END IF;
@@ -280,8 +305,8 @@ BEGIN
   END IF;
 
   -- issue to shipping
-  SELECT issueToShipping(pNEW.order_type, _soitem.coitem_id,
-                         pNEW.quantity, 0, pNEW.transaction_date::TIMESTAMP)
+  SELECT issueToShipping(pOrdertype, _soitem.coitem_id,
+                         pQuantity, 0, pTransactiondate::TIMESTAMP)
          INTO _itemlocSeries;
   IF (_itemlocSeries < 0) THEN
     RAISE EXCEPTION 'issueToShipping failed, result=%', _itemlocSeries;
@@ -306,7 +331,7 @@ BEGIN
     VALUES (_itemlocdistid,
             'I',
             _itemloc.itemloc_id,
-            (pNEW.quantity * -1.0),
+            (pQuantity * -1.0),
             endOfTime());
 
     -- post distributions
