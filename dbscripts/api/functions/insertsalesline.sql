@@ -87,13 +87,13 @@ BEGIN
     pNEW.customer_pn,
     CASE
       WHEN ((pNEW.create_order  AND (_r.item_type = 'M')) OR 
-           ((pNEW.create_order IS NULL) AND _r.itemsite_createwo)) THEN
+           ((pNEW.create_order IS NULL) AND _r.itemsite_createwo) AND (NOT _r.itemsite_stocked)) THEN
         'W'
       WHEN ((pNEW.create_order AND (_r.item_type = 'P')) OR 
-           ((pNEW.create_order IS NULL) AND _r.itemsite_createsopr)) THEN
+           ((pNEW.create_order IS NULL) AND _r.itemsite_createsopr) AND (NOT _r.itemsite_stocked)) THEN
         'R'
       WHEN ((pNEW.create_order AND (_r.item_type = 'P') AND (_r.itemsite_createsopo)) OR 
-           ((pNEW.create_order IS NULL) AND _r.itemsite_createsopo)) THEN
+           ((pNEW.create_order IS NULL) AND _r.itemsite_createsopo) AND (NOT _r.itemsite_stocked)) THEN
         'P'
     END,
     getitemid(pNEW.substitute_for),
