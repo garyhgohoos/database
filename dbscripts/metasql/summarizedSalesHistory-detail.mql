@@ -77,7 +77,8 @@ SELECT 1 AS dummy,
          0 AS totalunits_xttotalrole, 
          0 AS totalsales_xttotalrole 
 FROM saleshistory 
-WHERE (cohist_doctype NOT IN ('C')
+WHERE ((COALESCE(cohist_misc_type, '') <> 'F')
+ AND  (COALESCE(cohist_misc_type, '') <> 'T')
 <? if exists("startDate") ?>
  AND (cohist_invcdate >= <? value("startDate") ?>)
 <? endif ?>
