@@ -17,12 +17,11 @@ SELECT cobmisc_id, cohead_id,
        'curr' AS cobmisc_freight_xtnumericrole,
        'curr' AS cobmisc_tax_xtnumericrole,
        'curr' AS cobmisc_payment_xtnumericrole
-FROM cobmisc, cohead, custinfo, coitem, cobill
-WHERE ((cobmisc_cohead_id=cohead_id)
-   AND (cohead_cust_id=cust_id)
-   AND (coitem_cohead_id=cohead_id)
-   AND (cobill_coitem_id=coitem_id)
-   AND (NOT cobmisc_posted))
+FROM cobmisc JOIN cohead ON (cohead_id=cobmisc_cohead_id)
+             JOIN custinfo ON (cust_id=cohead_cust_id)
+             JOIN cobill ON (cobill_cobmisc_id=cobmisc_id)
+             JOIN coitem ON (coitem_id=cobill_coitem_id)
+WHERE (NOT cobmisc_posted)
 GROUP BY cobmisc_id, cohead_id, cohead_number, cust_number,
          cust_name, cobmisc_misc, cobmisc_freight, cobmisc_tax, cobmisc_payment
 ORDER BY cohead_number;
