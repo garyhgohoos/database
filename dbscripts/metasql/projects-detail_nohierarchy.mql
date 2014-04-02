@@ -9,10 +9,10 @@ SELECT prj_id AS id, 1 AS altId,
   prj.*, crmacct_name, cntct_name,
   addr_city, addr_state,
   prjtype_descr AS project_type,
-  CASE WHEN (prj_status='P') THEN 'Planning'
-       WHEN (prj_status='O') THEN 'In-Process'
-       WHEN (prj_status='C') THEN 'Completed'
-       ELSE 'Unknown' END AS project_status
+  CASE WHEN (prj_status='P') THEN <? value("planning") ?>
+       WHEN (prj_status='O') THEN <? value("open") ?>
+       WHEN (prj_status='C') THEN <? value("complete") ?>
+       ELSE <? value("undefined") ?> END AS project_status
 <? foreach("char_id_text_list") ?>
   , charass_alias<? literal("char_id_text_list") ?>.charass_value AS char<? literal("char_id_text_list") ?>
 <? endforeach ?>
@@ -70,6 +70,14 @@ WHERE (true)
 <? if exists("cntct_id") ?>
   AND (prj_cntct_id=<? value("cntct_id") ?>)
 <? endif ?>
+<? if exists("prjtype_id") ?>
+  AND (prj_prjtype_id=<? value("prjtype_id") ?>)
+<? endif ?>
+<? if exists("prjstatus") ?>
+  AND (prj_status=<? value("prjstatus") ?>)
+<? elseif not exists("showComplete") ?>
+  AND (prj_status <> 'C')
+<? endif ?>
 <? if exists("startStartDate") ?>
   AND (prj_start_date >= <? value("startStartDate") ?>)
 <? endif ?>
@@ -93,9 +101,6 @@ WHERE (true)
 <? endif ?>
 <? if exists("completedEndDate") ?>
   AND (prj_completed_date <= <? value("completedEndDate") ?>)
-<? endif ?>
-<? if not exists("showComplete") ?>
-  AND (prj_status <> 'C')
 <? endif ?>
 <? if exists("id") ?>
   AND (prj_id=<? value("id") ?>)
