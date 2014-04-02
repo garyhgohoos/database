@@ -39,11 +39,11 @@ BEGIN
   SELECT item_id, item_type INTO _itemid, _type
   FROM item
   WHERE (item_number=UPPER(pNEW.item_number));
-  IF (NOT FOUND OR _type IN ('F', 'R', 'L','J')) THEN
+  IF (NOT FOUND OR _type IN ('F', 'R', 'L','J', 'K')) THEN
     SELECT item_id, item_type INTO _itemid, _type
     FROM item
     WHERE (item_upccode=pNEW.item_number);
-    IF (NOT FOUND OR _type IN ('F', 'R', 'L','J')) THEN
+    IF (NOT FOUND OR _type IN ('F', 'R', 'L','J', 'K')) THEN
       RAISE EXCEPTION 'Function insertPhysInvCount failed because Item % not found or invalid type', pNEW.item_number;
     END IF;
   END IF;
