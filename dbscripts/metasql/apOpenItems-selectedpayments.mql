@@ -9,6 +9,7 @@ SELECT *,
             WHEN (apopen_doctype='D') THEN <? value("debitmemo") ?>
             WHEN (apopen_doctype='C') THEN <? value("creditmemo") ?>
        END AS doctype,
+       CASE WHEN (apopen_doctype='C') THEN 'emphasis' END AS doctype_qtforegroundrole,
        'curr' AS apselect_amount_xtnumericrole,
        'curr' AS apselect_amount_base_xtnumericrole,
        'curr' AS apselect_running_base_xtnumericrole,

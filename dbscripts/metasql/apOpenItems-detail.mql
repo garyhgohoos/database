@@ -10,6 +10,7 @@ SELECT apopen_id, apopen_ponumber, apopen_docnumber,
                          WHEN (apopen_doctype='V') THEN <? value("voucher") ?>
                          ELSE <? value("other") ?>
                     END AS f_doctype,
+                    CASE WHEN (apopen_doctype='C') THEN 'emphasis' END AS f_doctype_qtforegroundrole,
                     vend_number, vend_name,
                     apopen_invcnumber AS invoicenumber,
                     apopen_docdate, apopen_duedate, apopen_amount, apopen_status, 
