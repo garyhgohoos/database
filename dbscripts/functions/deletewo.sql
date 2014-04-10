@@ -44,7 +44,7 @@ BEGIN
 
   SELECT fetchMetricBool('Routings') INTO _routings;
 
-  IF _routings THEN
+  IF (_routings AND woStatus != 'C') THEN
     SELECT count(*) INTO _wotcCnt
     FROM xtmfg.wotc
     WHERE (wotc_wo_id=pWoid);
@@ -73,6 +73,8 @@ BEGIN
     WHERE (womatl_wo_id=pWoid);
 
     IF _routings THEN
+      DELETE FROM xtmfg.wotc
+      WHERE (wotc_wo_id=pWoid);
       DELETE FROM xtmfg.wooper
       WHERE (wooper_wo_id=pWoid);
     END IF;
